@@ -1,0 +1,169 @@
+#include <SPI.h>
+#include <SD.h>
+
+#define TEST 0
+
+// Pins for SD card module
+#define cspin 10
+#define mosi  11
+#define miso  12
+
+// Pins for driving error LEDs
+#define err0   1  // FILE exists and SD module functioning correctly, but FILE contains bad data
+#define err1   0  // FILE doesn't exist on SD card OR SD module is incorrectly functioning
+
+// Pins for determing 2051 programming mode
+#define xtal    14 // XTAL1 
+#define rst     15 // Vpp -- 12V
+#define prog0   16 // 3.2
+#define inter   17 // 3.3
+#define enable  18 // 3.4
+#define prog1   19 // 3.5 & 3.7
+
+// Pins for outputting/reading data from 2051
+#define io0 2 // LSB
+#define io1 3
+#define io2 4
+#define io3 5
+#define io4 6
+#define io5 7
+#define io6 8
+#define io7 9 // MSB
+
+ //------ SETUP BLOCK  ------//
+void setup() {
+  if (TEST == 1) {
+    Serial.begin(9600);
+    while (!Serial) { ; }
+  } else {
+      pinMode(err0, OUTPUT);
+      pinMode(err1, OUTPUT);
+  }
+
+  helloWorld();
+  
+  if (TEST == 0) {
+    while(SD.begin(cspin) == 0) {
+      digitalWrite(err1, HIGH);
+    } 
+  }
+}
+
+ //------- MAIN BLOCK ------//
+void loop() {
+  int retCode = writeChip();
+  if (TEST == 0 && retCode == -1) {
+    digitalWrite(err1, HIGH);
+  }
+  else if (TEST == 0 && retCode == -2) {
+    digitalWrite(err0, HIGH);
+  }
+
+}
+
+
+ //------ FUNCTIONS ------//
+
+// function takes values encoded as chars, and outputs then across a set of parallel pins
+void hex2pins(char hex, int startPin) {
+  int mask = 1;
+  for (int i = 0; i < 8; i++) {
+    
+    if (hex && mask > 0) { digitalWrite(startPin + i, HIGH); } 
+    else                 { digitalWrite(startPin + i, LOW); }
+    
+    mask = mask << 1;
+  }
+}
+
+// Keep data LEDs on for 1sec on boot-up
+void helloWorld() {
+  pinMode(io0, OUTPUT); pinMode(io1, OUTPUT);
+  pinMode(io2, OUTPUT); pinMode(io2, OUTPUT);
+  pinMode(io4, OUTPUT); pinMode(io5, OUTPUT);
+  pinMode(io6, OUTPUT); pinMode(io7, OUTPUT);
+
+  pinMode(xtal, OUTPUT);  pinMode(rst, OUTPUT);
+  pinMode(inter, OUTPUT); pinMode(enable, OUTPUT);
+  pinMode(prog0, OUTPUT); pinMode(prog1, OUTPUT);
+  
+  for (int i = 0; i < 8; i++) {
+    digitalWrite(io0 + i, HIGH);
+  }
+
+  for (int j = 0; j < 6; j++) {
+    digitalWrite(xtal + j, HIGH);
+  }
+  
+  delay(1000);
+  for (int i = 0; i < 8; i++) {
+    digitalWrite(io7-i, LOW);
+  }
+
+  for (int j = 0; j < 6; j++) {
+    digitalWrite(xtal + j, LOW);
+  }
+}
+
+//  Helper function: decodes ASCII text, if char is '1' set pinNUM HIGH, if char is '0' set pinNUM LOW, otherwise return intval -1
+int char2output(char letter, int pinNum) {
+  if (letter == '1') {
+    digitalWrite(pinNum, HIGH);
+    return 0;
+  }
+  else if (letter == '0') {
+    digitalWrite(pinNum, LOW);
+    return 0;
+  }
+  else {   
+    return -1;
+  }
+}
+
+int readChip() {
+  SD.open("2051out.txt", FILE_WRITE);
+  
+  delay(100);
+  
+  pinMode(io0, INPUT); pinMode(io1, INPUT);
+  pinMode(io2, INPUT); pinMode(io2, INPUT);
+  pinMode(io4, INPUT); pinMode(io5, INPUT);
+  pinMode(io6, INPUT); pinMode(io7, INPUT);
+  return 0;
+}
+
+int writeChip() {
+  char buffer[9];
+  int  err_code;
+  
+  delay(100);
+  
+  if (SD.exists("2051.txt") == 0) { 
+    return -1;
+  }
+  
+  File inFile = SD.open("2051.txt", FILE_READ);
+
+ // CTL Pins
+
+ // IO Pins
+  pinMode(io0, OUTPUT); pinMode(io1, OUTPUT);
+  pinMode(io2, OUTPUT); pinMode(io2, OUTPUT);
+  pinMode(io4, OUTPUT); pinMode(io5, OUTPUT);
+  pinMode(io6, OUTPUT); pinMode(io7, OUTPUT);
+
+  for (int i = 0; i < 10; i++ ) {
+    inFile.read(buffer, 9);
+    if (TEST == 1) { Serial.println(buffer); }
+    
+    for (int y = 0; y < 8; y++) {
+      err_code = 0 || char2output(buffer[y] , (9 - y));
+    }
+    
+    if (err_code != 0) { return -2;}
+    
+    delay(1000);
+  }
+
+  return 0;
+}
